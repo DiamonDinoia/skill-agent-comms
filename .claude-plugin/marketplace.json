@@ -1,0 +1,16 @@
+{
+  "name": "agent-comms",
+  "version": "0.1.0",
+  "description": "Send, read and addressing rules for subagents that talk to each other over the agentbus message bus.",
+  "owner": {
+    "name": "Marco Barbone"
+  },
+  "plugins": [
+    {
+      "name": "agent-comms",
+      "source": "./",
+      "description": "Send, read and addressing rules for subagents that talk to each other over the agentbus message bus.",
+      "category": "productivity"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "agent-comms",
+  "description": "Send, read and addressing rules for subagents that talk to each other over the agentbus message bus.",
+  "version": "0.1.0",
+  "author": { "name": "Marco Barbone", "url": "https://github.com/DiamonDinoia" },
+  "homepage": "https://github.com/DiamonDinoia/skill-agent-comms",
+  "repository": "https://github.com/DiamonDinoia/skill-agent-comms",
+  "license": "MIT",
+  "keywords": ["skills", "agent-comms", "harness", "agents", "message-bus"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "agent-comms",
+    "shortDescription": "Subagent message bus rules",
+    "longDescription": "Gives a dispatched subagent the send, read and addressing rules for talking to its siblings and its manager over the agentbus message bus.",
+    "category": "Productivity",
+    "capabilities": ["Instructions"]
+  }
+}
