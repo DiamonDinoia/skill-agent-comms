@@ -9,7 +9,8 @@ count=$(printf '%s\n' "$versions" | grep -c .)
 skill_version=$(sed -n 's/^version: *//p' "$root"/skills/agent-comms/SKILL.md)
 [ "$skill_version" = "$versions" ] || { echo "FAIL: SKILL.md version '$skill_version' != manifest version '$versions'" >&2; exit 1; }
 name=$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$root"/skills/index.json | head -n 1)
-for f in $(sed -n 's/.*"files": *\[\(.*\)\].*/\1/p' "$root"/skills/index.json | tr -d '"' | tr ',' ' '); do
+for f in $(sed -n 's/.*"files": *\[\(.*\)\].*/\1/p' "$root/skills/index.json" | tr -d '"' | tr ',' ' '); do
   [ -e "$root/skills/$name/$f" ] || { echo "FAIL: skills/index.json lists missing file skills/$name/$f" >&2; exit 1; }
 done
-echo "OK: version $versions consistent in manifests, SKILL.md and skills/index.json"
+nice -n 19 ionice -c 3 env -u AGENTBUS_WAKE_MODULE python3 "$root/agentbus/test/test_wake.py" >/dev/null || { echo "FAIL: agentbus wake tests" >&2; exit 1; }
+echo "OK: version $versions consistent in manifests, SKILL.md and skills/index.json; wake tests pass"

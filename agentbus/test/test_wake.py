@@ -120,5 +120,55 @@ class WakeTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
 
 
+class HermesPluginTest(unittest.TestCase):
+    """Contract test for the Hermes user plugin adapter (live run is UNRUN, see evidence)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="agentbus-test.")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.db = make_db(self.tmp, [("m", "b1", "hello-from-mgr"), ("m", "*", "wave")])
+        self._old = {k: os.environ.get(k) for k in ("AGENTBUS_DB", "AGENTBUS_AGENT")}
+        os.environ["AGENTBUS_DB"] = self.db
+        os.environ["AGENTBUS_AGENT"] = "w-mgr"
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        for k, v in self._old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def _hook(self):
+        path = os.path.join(AGENTBUS_DIR, "..", "hermes-plugin", "agentbus-wake", "__init__.py")
+        spec = importlib.util.spec_from_file_location("agentbus_wake_plugin", os.path.abspath(path))
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        class Ctx:
+            def __init__(self):
+                self.hooks = {}
+
+            def register_hook(self, name, cb, **kw):
+                self.hooks[name] = cb
+
+        ctx = Ctx()
+        mod.register(ctx)
+        return ctx.hooks["transform_tool_result"]
+
+    def test_task_id_wins_over_env_and_rows_append_once(self):
+        cb = self._hook()
+        out = cb(task_id="b1", result="tool output")
+        self.assertIn("tool output", out)
+        self.assertIn("hello-from-mgr", out)  # addressed to task_id b1, not to env w-mgr
+        self.assertIsNone(cb(task_id="b1", result="tool output"))  # once only
+
+    def test_no_name_no_output(self):
+        cb = self._hook()
+        os.environ.pop("AGENTBUS_AGENT", None)
+        self.assertIsNone(cb(task_id="", result="x"))  # broadcast row is present, no name means no output
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
