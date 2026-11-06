@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/agentbus/hooks/wake-hook.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

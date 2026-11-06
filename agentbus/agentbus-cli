@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""Manager CLI on the agentbus SQLite DB.
+
+Usage:
+  agentbus-cli pending          open questions
+  agentbus-cli answer ID TEXT   answer an open question
+  agentbus-cli send TO BODY     send a message (sender name from AGENTBUS_AGENT, default "manager")
+  agentbus-cli log [N]          last N messages, default 20
+"""
+import os
+import sqlite3
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from busdb import resolve_db
+
+DB = resolve_db()
+WHO = os.environ.get("AGENTBUS_AGENT", "manager")
+
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS agents(name TEXT PRIMARY KEY, pid INT, last_seen REAL);
+CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY, sender TEXT, rcpt TEXT, body TEXT, ts REAL);
+CREATE TABLE IF NOT EXISTS questions(id INTEGER PRIMARY KEY, sender TEXT, body TEXT, answer TEXT, created REAL, answered_ts REAL);
+"""
+
+
+def db():
+    c = sqlite3.connect(DB, timeout=30)
+    c.execute("PRAGMA busy_timeout=30000")  # before the WAL pragma below: the busy handler does not cover the journal-mode change
+    for n in range(5):
+        try:
+            c.execute("PRAGMA journal_mode=WAL")
+            break
+        except sqlite3.OperationalError as e:
+            if "database is locked" not in str(e) or n == 4:
+                raise
+            time.sleep(0.2)
+    c.executescript(SCHEMA)
+    return c
+
+
+def int_arg(s):
+    try:
+        return int(s)
+    except ValueError:
+        print(f"not an integer: {s}", file=sys.stderr)
+        sys.exit(2)
+
+
+def main(argv):
+    cmd = argv[1] if len(argv) > 1 else ""
+    if cmd == "pending":
+        with db() as c:
+            rows = c.execute(
+                "SELECT id, sender, body, created FROM questions WHERE answered_ts IS NULL ORDER BY id"
+            ).fetchall()
+        for qid, sender, body, created in rows:
+            print(f"{qid}\t{sender}\t{time.strftime('%H:%M:%S', time.localtime(created))}\t{body}")
+        if not rows:
+            print("(no pending questions)")
+    elif cmd == "answer" and len(argv) >= 4:
+        qid, text = int_arg(argv[2]), " ".join(argv[3:])
+        with db() as c:
+            cur = c.execute(
+                "UPDATE questions SET answer=?, answered_ts=? WHERE id=? AND answered_ts IS NULL",
+                (text, time.time(), qid))
+        if not cur.rowcount:
+            sys.exit(f"no open question with id={qid}")  # rc 1: a no-op answer is a failure for scripts
+        print(f"answered id={qid}")
+    elif cmd == "send" and len(argv) >= 4:
+        with db() as c:
+            cur = c.execute("INSERT INTO messages(sender, rcpt, body, ts) VALUES(?,?,?,?)",
+                            (WHO, argv[2], " ".join(argv[3:]), time.time()))
+        print(f"sent id={cur.lastrowid}")
+    elif cmd == "log":
+        n = int_arg(argv[2]) if len(argv) > 2 else 20
+        if n < 1:
+            print(f"log count must be at least 1: {n}", file=sys.stderr)
+            sys.exit(2)
+        with db() as c:
+            rows = c.execute(
+                "SELECT id, sender, rcpt, body, ts FROM messages ORDER BY id DESC LIMIT ?", (n,)
+            ).fetchall()
+        for mid, sender, rcpt, body, ts in reversed(rows):
+            print(f"{mid}\t{time.strftime('%H:%M:%S', time.localtime(ts))}\t{sender}->{rcpt}\t{body}")
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main(sys.argv)

@@ -30,6 +30,41 @@ For a remote install, add `https://raw.githubusercontent.com/DiamonDinoia/skill-
 
 The npm plugin route is unsupported for a markdown-only skill. `opencode plugin add` requires a JS entrypoint, a server or TUI module. This repo ships markdown only.
 
+## Codex
+
+Two routes install the wake hook into Codex. Both load the same `hooks/hooks.json` that Claude Code uses. The hook output goes to `hookSpecificOutput.additionalContext`. This is the only context field that Codex accepts, because the Codex output schema rejects unknown top-level keys. Claude Code reads the same field.
+
+The plugin route is the primary route. Add the repository as a marketplace and install the plugin:
+
+```sh
+codex plugin marketplace add https://github.com/DiamonDinoia/skill-agent-comms.git
+codex plugin add agent-comms@agent-comms
+```
+
+A local clone works too. Pass the clone path to `codex plugin marketplace add`. Codex then loads `hooks/hooks.json` from the plugin root.
+
+The hook-config route is the fallback when no plugin marketplace is available. Put the hook in `~/.codex/hooks.json`, or in the project `.codex/hooks.json`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"/path/to/skill-agent-comms/agentbus/hooks/wake-hook.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Codex shows a trust prompt the first time it sees each hook. A non-interactive run (`codex exec`) cannot show the prompt and skips untrusted hooks. Trust the hook once in the Codex TUI, or pass `--dangerously-bypass-hook-trust` to `codex exec` for automation that already vets the hook source.
+
 ## Fork first
 
 Fork this repo before you install, then work from a clone of your fork.

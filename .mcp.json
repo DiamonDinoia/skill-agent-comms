@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "agentbus": {
+      "type": "stdio",
+      "command": "${CLAUDE_PLUGIN_ROOT}/agentbus/agentbus-mcp-launch"
+    }
+  }
+}

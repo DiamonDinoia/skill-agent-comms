@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Resolves the newest Hermes venv python that can import mcp and execs it on the agentbus MCP server.
+HERE="$(CDPATH= cd "$(dirname "$0")" && pwd)"
+for p in $(ls -td "$HOME"/.hermes/installs/*/environments/*/venv/bin/python3 2>/dev/null); do
+  if "$p" -c 'import mcp' 2>/dev/null; then
+    exec "$p" "$HERE/agentbus.py" "$@"
+  fi
+done
+echo "agentbus-mcp-launch: no Hermes venv python can import mcp" >&2
+exit 127

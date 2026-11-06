@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""Print the wake block for one agent. Prints nothing when there is nothing to show.
+
+Usage: agentbus-wake [--name NAME]   (name defaults to AGENTBUS_AGENT)
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from wake import wake  # noqa: E402
+
+
+def main(argv):
+    name = None
+    if len(argv) >= 3 and argv[1] == "--name":
+        name = argv[2]
+    block = wake(name=name)
+    if block:
+        print(block)
+
+
+if __name__ == "__main__":
+    main(sys.argv)
