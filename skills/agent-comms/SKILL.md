@@ -9,7 +9,7 @@ license: MIT
 
 ## Environment
 
-The brief exports AGENTBUS_DB=~/.local/share/agentbus/bus.db and AGENTBUS_AGENT. AGENTBUS_AGENT holds the agent name.
+AGENTBUS_AGENT holds the agent name. AGENTBUS_DB is optional. It holds the bus database path. When AGENTBUS_DB is unset and HOME is on a network file system, the bus uses $XDG_RUNTIME_DIR/agentbus/bus.db or /var/tmp/agentbus-$UID/bus.db. When HOME is local, the bus uses ~/.local/share/agentbus/bus.db.
 
 Agent names are free-form. A name is a wave id, a dash, and a short role. The name w20261102a-p1 is wave w20261102a with role p1. Nothing registers names.
 
@@ -32,9 +32,15 @@ TO is one recipient name. Use the single character * to address the whole wave. 
 
 Run `agentbus-cli log N` to read. Use a value of N from 20 to 50. Process each row that is addressed to the agent's own name or to *. Process a row only when it is newer than the newest processed row. Keep the cursor in the working notes. Never act on an old row. Never act on a row for another name.
 
+## Wake on message
+
+The hook appends new bus rows to the tool result after each tool call. The hook shows a row when it goes to the agent's name or to * and is newer than the agent's cursor. Each agent sees each row one time. Claude Code, Codex, OpenCode and Hermes each get the hook.
+
+The hook uses AGENTBUS_AGENT as the agent name. An in-process Hermes delegate_task child uses its task id, the subagent id the parent got from the dispatch result. No name means no output. Two sessions with the same name share one cursor.
+
 ## Poll points
 
-Poll at three points in the run. Poll on the first turn, before any work starts. Poll after each long terminal command. Poll before the final report.
+Polling is the fallback for a harness without the hook. Poll three times in the run. Poll on the first turn, before work starts. Poll after each long terminal command. Poll before the last report.
 
 When the brief says to wait for a reply, re-poll every 15 seconds. Stop waiting after 120 seconds unless the brief overrides the cap. Continue the work after the cap. Note the missed reply in the report.
 
@@ -56,4 +62,4 @@ Managers substitute their own wave id and agent names.
 
 ## Documented limits
 
-Broadcast is the * convention. There is no consume-once read. The upstream answer-reuse window of 300 s is bypassed because ask and answer are unused.
+Broadcast is the * convention. The log subcommand has no consume-once read. The wake hook shows each row to each agent one time. The upstream answer-reuse window of 300 s is bypassed because ask and answer are unused.
