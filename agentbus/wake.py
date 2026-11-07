@@ -23,11 +23,14 @@ BUSY_TIMEOUT_S = 0.05
 
 
 def cursor_path(db, name):
-    # the key derives from the exact agent name and the database path: a:b and a/b
-    # never share a cursor, and one name on two databases keeps two cursors
+    # the key derives from the exact agent name and the canonical database path,
+    # so a symlink alias of one database shares one cursor and one lock;
+    # a:b and a/b never share a cursor, and one name on two databases keeps
+    # two cursors
+    real = os.path.realpath(db)  # a missing file keeps its name under the parent realpath
     key = hashlib.sha256(
-        ("%s\x00%s" % (os.path.abspath(db), name)).encode("utf-8", "surrogateescape")).hexdigest()
-    return os.path.join(os.path.dirname(os.path.abspath(db)) or ".", "cursors", key)
+        ("%s\x00%s" % (real, name)).encode("utf-8", "surrogateescape")).hexdigest()
+    return os.path.join(os.path.dirname(real) or ".", "cursors", key)
 
 
 def _lock(path):

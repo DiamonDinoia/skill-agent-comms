@@ -185,6 +185,27 @@ class WakeTest(unittest.TestCase):
         db2 = make_db(self.tmp, [("m", "a:b", "SECOND_DB")], filename="bus2.db")
         self.assertIn("SECOND_DB", wake_mod.wake(db=db2, name="a:b") or "")
 
+    def test_symlink_and_real_path_share_one_delivery(self):
+        # R2: a same-directory symlink to the database is the same database,
+        # so both sessions must share one cursor and one lock
+        db = make_db(self.tmp, [("m", "b", "SYMLINK_ONCE")])
+        alias = os.path.join(self.tmp, "alias.db")
+        os.symlink(os.path.basename(db), alias)
+        ctx = multiprocessing.get_context("fork")
+        queue = ctx.Queue()
+
+        def child(path):
+            queue.put(wake_mod.wake(db=path, name="b"))
+
+        procs = [ctx.Process(target=child, args=(path,)) for path in (db, alias)]
+        for p in procs:
+            p.start()
+        for p in procs:
+            p.join(timeout=30)
+        results = [queue.get(timeout=5) for _ in procs]
+        self.assertEqual(sum("SYMLINK_ONCE" in (r or "") for r in results), 1,
+                         "one row was delivered %d times" % sum("SYMLINK_ONCE" in (r or "") for r in results))
+
     def test_fresh_home_first_send(self):
         # finding 7: the default path under a fresh HOME has no parent directory
         home = os.path.join(self.tmp, "fresh-home")

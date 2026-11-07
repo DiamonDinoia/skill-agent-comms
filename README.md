@@ -67,7 +67,7 @@ Codex shows a trust prompt the first time it sees each hook. A non-interactive r
 
 ## Documented limits
 
-The Hermes wake plugin cannot rewrite a `tool_search`, `tool_describe` or error result in place. Those returns skip the `transform_tool_result` hook (model_tools.py:919-921 and 977-979) and the `post_tool_call` return value is discarded (model_tools.py:713). The block therefore rides the next normal tool result, else the context of the next turn. A block polled but not yet delivered is lost when the Hermes process exits.
+The Hermes wake plugin cannot rewrite a `tool_search`, `tool_describe` or error result in place. Those returns skip the `transform_tool_result` hook (model_tools.py:919-921 and 977-979) and the `post_tool_call` return value is discarded (model_tools.py:713). The block therefore rides the next normal tool result, else the context of the next turn. A block polled but not yet delivered is lost when the Hermes process exits. An agent that upgrades from the plain-name cursor file format has no new hash-named cursor file, so it sees its already-delivered rows once more.
 
 ## Fork first
 
