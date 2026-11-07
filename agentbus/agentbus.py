@@ -17,7 +17,7 @@ import time
 from mcp.server.mcpserver import MCPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from busdb import resolve_db
+from busdb import ensure_db_dir, resolve_db
 
 DB = resolve_db()
 AGENT = os.environ.get("AGENTBUS_AGENT", "anon")
@@ -37,6 +37,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS questions_open_uniq ON questions(sender, body)
 
 
 def db():
+    ensure_db_dir(DB)  # a fresh HOME or runtime dir has no parent for the SQLite file
     c = sqlite3.connect(DB, timeout=30)
     c.execute("PRAGMA busy_timeout=30000")  # before the WAL pragma below: the busy handler does not cover the journal-mode change
     for n in range(5):

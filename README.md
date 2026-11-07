@@ -65,6 +65,10 @@ The hook-config route is the fallback when no plugin marketplace is available. P
 
 Codex shows a trust prompt the first time it sees each hook. A non-interactive run (`codex exec`) cannot show the prompt and skips untrusted hooks. Trust the hook once in the Codex TUI, or pass `--dangerously-bypass-hook-trust` to `codex exec` for automation that already vets the hook source.
 
+## Documented limits
+
+The Hermes wake plugin cannot rewrite a `tool_search`, `tool_describe` or error result in place. Those returns skip the `transform_tool_result` hook (model_tools.py:919-921 and 977-979) and the `post_tool_call` return value is discarded (model_tools.py:713). The block therefore rides the next normal tool result, else the context of the next turn. A block polled but not yet delivered is lost when the Hermes process exits.
+
 ## Fork first
 
 Fork this repo before you install, then work from a clone of your fork.

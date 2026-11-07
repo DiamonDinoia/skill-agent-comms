@@ -31,6 +31,13 @@ def is_network_fs(path):
     return fstype.startswith("nfs") or fstype in _NET_FS
 
 
+def ensure_db_dir(db):
+    """Create the database's parent directory with private permissions (writers only)."""
+    d = os.path.dirname(os.path.abspath(db))
+    if d:
+        os.makedirs(d, mode=0o700, exist_ok=True)
+
+
 def resolve_db(env=None):
     """AGENTBUS_DB, else a local path when HOME is on a network fs, else the XDG data path."""
     env = os.environ if env is None else env
