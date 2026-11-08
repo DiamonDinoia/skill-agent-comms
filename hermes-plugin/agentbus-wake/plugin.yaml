@@ -1,5 +1,5 @@
 name: agentbus-wake
-version: 0.1.1
+version: 0.2.0
 description: "Wake-on-message: append new agentbus rows for this agent to each tool result. Bus name is the task_id of an in-process delegate_task child, else AGENTBUS_AGENT; no name means no output."
 author: Marco Barbone
 provides_hooks:

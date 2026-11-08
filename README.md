@@ -26,7 +26,7 @@ Two routes install the skill into opencode.
 
 For a local install, run `./install-opencode.sh`. The script clones `https://github.com/DiamonDinoia/skill-agent-comms` into `~/.cache/opencode-skills/skill-agent-comms` and symlinks `skills/agent-comms` into `~/.config/opencode/skills/agent-comms`. Set `OPENCODE_SKILLS_CACHE` to change the cache directory. Restart opencode after the script runs. The script never overwrites an existing path. It moves a conflict into a backup directory and reports the move.
 
-For a remote install, add `https://raw.githubusercontent.com/DiamonDinoia/skill-agent-comms/v0.1.1/skills/` to the `skills` list in the opencode config. opencode reads `index.json` from that URL and downloads the listed skill files.
+For a remote install, add `https://raw.githubusercontent.com/DiamonDinoia/skill-agent-comms/v0.2.0/skills/` to the `skills` list in the opencode config. opencode reads `index.json` from that URL and downloads the listed skill files.
 
 The npm plugin route is unsupported for a markdown-only skill. `opencode plugin add` requires a JS entrypoint, a server or TUI module. This repo ships markdown only.
 

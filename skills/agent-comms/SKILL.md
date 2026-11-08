@@ -1,7 +1,7 @@
 ---
 name: agent-comms
 description: "Use when a manager or parent dispatches you onto the agent bus: these are the send, read and address rules"
-version: 0.1.1
+version: 0.2.0
 author: Marco Barbone
 license: MIT
 ---

@@ -1,7 +1,7 @@
 {
   "name": "agent-comms",
   "description": "Send, read and addressing rules for subagents that talk to each other over the agentbus message bus.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "author": { "name": "Marco Barbone", "url": "https://github.com/DiamonDinoia" },
   "homepage": "https://github.com/DiamonDinoia/skill-agent-comms",
   "repository": "https://github.com/DiamonDinoia/skill-agent-comms",
