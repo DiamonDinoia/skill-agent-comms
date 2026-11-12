@@ -1,0 +1,3 @@
+#!/bin/sh
+# Claude Code puts the plugin's bin/ on the Bash PATH; the CLI lives in agentbus/.
+exec python3 "$(dirname "$(readlink -f "$0")")/../agentbus/agentbus-cli" "$@"

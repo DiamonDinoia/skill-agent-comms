@@ -6,6 +6,8 @@ Usage:
   agentbus-cli answer ID TEXT   answer an open question
   agentbus-cli send TO BODY     send a message (sender name from AGENTBUS_AGENT, default "manager")
   agentbus-cli log [N]          last N messages, default 20
+  agentbus-cli wait [SECONDS]   block until a new message for AGENTBUS_AGENT or *;
+                                no SECONDS: no deadline; exit 1 at the deadline, 2 on an error
 """
 import os
 import sqlite3
@@ -14,8 +16,10 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from busdb import ensure_db_dir, resolve_db
+import wake
 
 DB = resolve_db()
+WHO_SET = bool(os.environ.get("AGENTBUS_AGENT", "").strip())
 WHO = os.environ.get("AGENTBUS_AGENT", "manager")
 
 
@@ -86,6 +90,20 @@ def main(argv):
             ).fetchall()
         for mid, sender, rcpt, body, ts in reversed(rows):
             print(f"{mid}\t{time.strftime('%H:%M:%S', time.localtime(ts))}\t{sender}->{rcpt}\t{body}")
+    elif cmd == "wait" and len(argv) <= 3:
+        secs = int_arg(argv[2]) if len(argv) == 3 else None
+        if (secs is not None and secs < 1) or not WHO_SET:
+            print("wait needs AGENTBUS_AGENT set and SECONDS >= 1 when given", file=sys.stderr)
+            sys.exit(2)
+        try:
+            block = wake.wait(secs, db=DB)
+        except (OSError, OverflowError, sqlite3.Error) as e:
+            print(f"wait failed: {e}", file=sys.stderr)
+            sys.exit(2)  # 1 means the deadline passed
+        if block is None:
+            print(f"no message for {WHO} after {secs} s", file=sys.stderr)
+            sys.exit(1)
+        print(block)
     else:
         sys.exit(__doc__)
 

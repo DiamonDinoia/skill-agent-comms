@@ -256,6 +256,124 @@ class WakeTest(unittest.TestCase):
         self.assertEqual(os.stat(os.path.dirname(db)).st_mode & 0o777, 0o700)
 
 
+class WaitTest(unittest.TestCase):
+    """wait() and `agentbus-cli wait`: sleep on an inotify event, wake on the first row, never spin."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="agentbus-wait.")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.db = os.path.join(self.tmp, "bus.db")
+        self.env = dict(os.environ, AGENTBUS_DB=self.db, AGENTBUS_AGENT="mgr")
+        self.send("x", "init")  # the real CLI writer: WAL mode, as in production
+
+    def send(self, to, body):
+        r = subprocess.run([BUSCLI, "send", to, body], env=self.env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def counted_wait(self, *args, **kw):
+        calls = [0]
+        real = wake_mod.wake
+
+        def counted(**k):
+            calls[0] += k.get("name") == kw.get("name")  # the waiter only, not other agents
+            return real(**k)
+        wake_mod.wake = counted
+        try:
+            return wake_mod.wait(*args, **kw), calls[0]
+        finally:
+            wake_mod.wake = real
+
+    def armed_wait(self, **kw):
+        """Run wait() in a thread; return (thread, out, armed). armed is set once the watch exists."""
+        armed, out, real = threading.Event(), {}, wake_mod._inotify
+
+        def inotify(d):
+            fd = real(d)
+            armed.set()
+            return fd
+        wake_mod._inotify = inotify
+        self.addCleanup(setattr, wake_mod, "_inotify", real)
+        t = threading.Thread(target=lambda: out.update(r=self.counted_wait(db=self.db, **kw)), daemon=True)
+        t.start()
+        self.assertTrue(armed.wait(10), "watch never armed")
+        return t, out
+
+    def test_event_filter_ignores_shm(self):
+        # positive control for the filter: a -shm write is the waiter's own read, a -wal write is a send
+        def ev(name):
+            raw = name + b"\0" * (16 - len(name))
+            return wake_mod._EVENT.pack(1, wake_mod.IN_MODIFY, 0, len(raw)) + raw
+        names = {b"bus.db", b"bus.db-wal", b"bus.db-journal"}
+        self.assertFalse(wake_mod._bus_written(ev(b"bus.db-shm"), names))
+        self.assertTrue(wake_mod._bus_written(ev(b"bus.db-shm") + ev(b"bus.db-wal"), names))
+        overflow = wake_mod._EVENT.pack(-1, wake_mod.IN_Q_OVERFLOW, 0, 0)
+        self.assertTrue(wake_mod._bus_written(overflow, names), "an overflow may hide a send")
+        with self.assertRaises(OSError):
+            wake_mod._bus_written(wake_mod._EVENT.pack(1, wake_mod.IN_IGNORED, 0, 0), names)
+
+    def test_idle_wait_does_not_wake_on_reads(self):
+        # a timer poll or a waiter woken by its own -shm write re-reads during the idle second
+        stop = threading.Event()
+
+        def readers():  # other agents read the bus the whole time
+            while not stop.is_set():
+                wake_mod.wake(db=self.db, name="other")
+                subprocess.run([BUSCLI, "log", "3"], env=self.env, capture_output=True)
+        t = threading.Thread(target=readers)
+        t.start()
+        t0 = time.monotonic()
+        try:
+            block, calls = self.counted_wait(1, db=self.db, name="b")
+        finally:
+            stop.set()
+            t.join()
+        self.assertIsNone(block)
+        self.assertGreaterEqual(time.monotonic() - t0, 1)
+        self.assertEqual(calls, 1, "re-read without a bus write")
+
+    def test_send_wakes_waiter_without_deadline(self):
+        t, out = self.armed_wait(name="b")
+        self.send("b", "PING")
+        t.join(10)
+        self.assertFalse(t.is_alive(), "waiter did not wake on a send")
+        block, calls = out["r"]
+        self.assertIn("PING", block)
+        self.assertGreaterEqual(calls, 2, "the row must come through the event path, not the first read")
+        self.assertIsNone(wake_mod.wake(db=self.db, name="b"), "wait must advance the cursor")
+
+    def test_broadcast_wakes_waiter(self):
+        t, out = self.armed_wait(name="b")
+        self.send("*", "CHECKIN")
+        t.join(10)
+        self.assertFalse(t.is_alive())
+        self.assertIn("CHECKIN", out["r"][0])
+
+    def test_wait_raises_on_a_broken_db(self):
+        # a waiter that swallowed this error would sleep forever on a bus nobody can write
+        bad = os.path.join(self.tmp, "bad.db")
+        with open(bad, "wb") as f:
+            f.write(b"not a database" * 100)
+        with self.assertRaises(sqlite3.DatabaseError):
+            wake_mod.wait(1, db=bad, name="b")
+        r = subprocess.run([BUSCLI, "wait", "1"], env=dict(self.env, AGENTBUS_DB=bad, AGENTBUS_AGENT="b"),
+                           capture_output=True, text=True, timeout=10)
+        self.assertEqual(r.returncode, 2, r.stderr)
+
+    def test_cli_wait_exit_codes(self):
+        env = dict(self.env, AGENTBUS_AGENT="b")
+        r = subprocess.run([BUSCLI, "wait", "1"], env=env, capture_output=True, text=True)
+        self.assertEqual((r.returncode, r.stdout), (1, ""), r.stderr)
+        self.send("b", "READY")
+        r = subprocess.run([BUSCLI, "wait"], env=env, capture_output=True, text=True, timeout=10)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("READY", r.stdout)
+        env.pop("AGENTBUS_AGENT")
+        r = subprocess.run([BUSCLI, "wait"], env=env, capture_output=True, text=True, timeout=10)
+        self.assertEqual(r.returncode, 2, "a nameless wait would block forever")
+        r = subprocess.run([BUSCLI, "wait", "0"], env=dict(env, AGENTBUS_AGENT="b"), capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2)
+
+
 class HermesPluginTest(unittest.TestCase):
     """Contract tests for the Hermes user plugin adapter (live run is in the evidence)."""
 

@@ -1,7 +1,7 @@
 ---
 name: agent-comms
 description: "Use when a manager or parent dispatches you onto the agent bus: these are the send, read and address rules"
-version: 0.2.0
+version: 0.3.0
 author: Marco Barbone
 license: MIT
 ---
@@ -15,10 +15,11 @@ Agent names are free-form. A name is a wave id, a dash, and a short role. The na
 
 ## Command surface
 
-Two commands are allowed. No other subcommand is allowed.
+Three commands are allowed. No other subcommand is allowed.
 
 - `agentbus-cli send TO BODY` sends BODY to TO.
 - `agentbus-cli log N` prints the last N bus rows.
+- `agentbus-cli wait` blocks until a new row for the agent's name or * arrives, then prints it.
 
 Do not use the pending subcommand. Its consume semantics are unproven. Do not use per-subcommand help. Bare usage and the --help flag exit with code 1. The log subcommand rejects a non-integer N with exit code 2.
 
@@ -42,7 +43,28 @@ The hook uses AGENTBUS_AGENT as the agent name. An in-process Hermes delegate_ta
 
 Polling is the fallback for a harness without the hook. Poll three times in the run. Poll on the first turn, before work starts. Poll after each long terminal command. Poll before the last report.
 
-When the brief says to wait for a reply, re-poll every 15 seconds. Stop waiting after 120 seconds unless the brief overrides the cap. Continue the work after the cap. Note the missed reply in the report.
+## Waiting for a message
+
+Never wait on a timer. Do not sleep and do not re-poll. When work cannot continue until a message comes, run `agentbus-cli wait` and stop until it exits.
+
+The wait sleeps on a kernel file event of the bus database. It uses no CPU while it sleeps. It ends at the first row for the agent's name or *. It prints that row and every other new row, and advances the cursor. A row that came before the wait started ends the wait at once.
+
+Start the wait the way the harness gets a completion event:
+
+- Claude Code: run it with Bash `run_in_background: true`, then end the turn. The harness starts the next turn when the wait exits.
+- Hermes: run `terminal(command="agentbus-cli wait", background=true, notify_on_complete=true)`. An in-process delegate_task child puts its task id in front: `AGENTBUS_AGENT=<task id> agentbus-cli wait`.
+- Codex: run it in the foreground. When the call yields, send an empty `write_stdin`, which blocks until the wait exits.
+
+The wait has no deadline. A brief can set one with `agentbus-cli wait SECONDS`. Read the exit status:
+
+- 0: rows came. Process them.
+- 1: the deadline passed. Continue the work and note the missed reply in the report.
+- 2: a bad call or a bus failure. Do not start the wait again. Report the error.
+- Killed by the harness, no output: start the wait again.
+
+A row that the tool hook already showed does not end the wait.
+
+The manager wakes a waiting agent with any row to its name. A manager that checks on its agents sends a check-in row. That row ends the wait of an agent that missed an earlier row.
 
 ## Send inventory
 
@@ -62,4 +84,4 @@ Managers substitute their own wave id and agent names.
 
 ## Documented limits
 
-Broadcast is the * convention. The log subcommand has no consume-once read. The wake hook shows each row to each agent one time. The upstream answer-reuse window of 300 s is bypassed because ask and answer are unused.
+Broadcast is the * convention. The log subcommand has no consume-once read. The wake hook shows each row to each agent one time. The upstream answer-reuse window of 300 s is bypassed because ask and answer are unused. The wait uses Linux inotify, so it works only on Linux. Any write to the bus ends the sleep for one read, so traffic to other agents costs the waiter one short query for each write.

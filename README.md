@@ -4,13 +4,13 @@ Send, read and addressing rules for subagents that talk to each other over the a
 
 ## What it does
 
-This skill gives a dispatched subagent the rules for talking to its siblings and its manager over the agentbus message bus. The brief exports `AGENTBUS_DB` and `AGENTBUS_AGENT`. The skill fixes the two allowed commands, `agentbus-cli send TO BODY` and `agentbus-cli log N`, the two address forms, one name or `*` for the whole wave, the read cursor discipline, and the three poll points of a run. It also carries the manager brief clause that starts the bus for a wave.
+This skill gives a dispatched subagent the rules for talking to its siblings and its manager over the agentbus message bus. The brief exports `AGENTBUS_DB` and `AGENTBUS_AGENT`. The skill fixes the three allowed commands, `agentbus-cli send TO BODY`, `agentbus-cli log N` and `agentbus-cli wait`, the two address forms, one name or `*` for the whole wave, the read cursor discipline, the poll points of a run, and how an idle agent sleeps until a message arrives. It also carries the manager brief clause that starts the bus for a wave.
 
 ## Non-destructive rules
 
 The skill only writes to the bus with `agentbus-cli send`. It never consumes a row, never deletes a row, and never registers an agent name.
 
-- Only `send` and `log` are allowed. The `pending` subcommand is not allowed.
+- Only `send`, `log` and `wait` are allowed. The `pending` subcommand is not allowed.
 - Act only on rows that are new and addressed to the agent's own name or to `*`.
 - Never send the final report over the bus. Never send a request for an approval-gated action. Use the report channel for those.
 
@@ -26,7 +26,7 @@ Two routes install the skill into opencode.
 
 For a local install, run `./install-opencode.sh`. The script clones `https://github.com/DiamonDinoia/skill-agent-comms` into `~/.cache/opencode-skills/skill-agent-comms` and symlinks `skills/agent-comms` into `~/.config/opencode/skills/agent-comms`. Set `OPENCODE_SKILLS_CACHE` to change the cache directory. Restart opencode after the script runs. The script never overwrites an existing path. It moves a conflict into a backup directory and reports the move.
 
-For a remote install, add `https://raw.githubusercontent.com/DiamonDinoia/skill-agent-comms/v0.2.0/skills/` to the `skills` list in the opencode config. opencode reads `index.json` from that URL and downloads the listed skill files.
+For a remote install, add `https://raw.githubusercontent.com/DiamonDinoia/skill-agent-comms/v0.3.0/skills/` to the `skills` list in the opencode config. opencode reads `index.json` from that URL and downloads the listed skill files.
 
 The npm plugin route is unsupported for a markdown-only skill. `opencode plugin add` requires a JS entrypoint, a server or TUI module. This repo ships markdown only.
 

@@ -9,12 +9,14 @@ cursor delivers on the next call.
 import fcntl
 import hashlib
 import os
+import select
 import sqlite3
+import struct
 import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from busdb import resolve_db  # noqa: E402
+from busdb import ensure_db_dir, resolve_db  # noqa: E402
 
 MAX_ROWS = 50
 # the hook rides a tool call with a 100 ms budget; the SQLite busy handler gets at
@@ -64,8 +66,11 @@ def _write_cursor(path, last_id):
     os.replace(tmp, path)
 
 
-def wake(db=None, name=None, env=None):
-    """Rows block for NAME, or None. Advances the cursor past every row shown."""
+def wake(db=None, name=None, env=None, strict=False):
+    """Rows block for NAME, or None. Advances the cursor past every row shown.
+
+    strict=True raises every error except the ones a concurrent writer causes.
+    """
     env = os.environ if env is None else env
     fd = None
     try:
@@ -98,7 +103,12 @@ def wake(db=None, name=None, env=None):
         # advance before returning: a failed cursor write must not show rows twice
         _write_cursor(cursor, rows[-1][0])
         return "[agentbus: new messages]\n" + out
-    except Exception:
+    except Exception as e:
+        # a writer that locks the database or is creating its tables writes next,
+        # and that write wakes a waiter, so only these errors may pass in strict mode
+        if strict and not (isinstance(e, sqlite3.OperationalError)
+                           and ("locked" in str(e) or "no such table" in str(e))):
+            raise
         return None
     finally:
         if fd is not None:  # close releases the flock
@@ -106,3 +116,69 @@ def wake(db=None, name=None, env=None):
                 os.close(fd)
             except OSError:
                 pass
+
+
+IN_MODIFY, IN_Q_OVERFLOW, IN_IGNORED = 0x2, 0x4000, 0x8000
+_EVENT = struct.Struct("iIII")  # struct inotify_event: wd, mask, cookie, len, then name[len]
+
+
+def _inotify(directory):
+    """inotify fd that reports IN_MODIFY on the files of directory. Linux only."""
+    import ctypes  # here, not at the top: the PostToolUse hook imports this module on every tool call
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    if not hasattr(libc, "inotify_init1"):
+        raise OSError("agentbus wait needs Linux inotify")
+    fd = libc.inotify_init1(os.O_CLOEXEC)
+    if fd < 0 or libc.inotify_add_watch(fd, os.fsencode(directory), IN_MODIFY) < 0:
+        err = ctypes.get_errno()
+        if fd >= 0:
+            os.close(fd)
+        raise OSError(err, "inotify on %s: %s" % (directory, os.strerror(err)))
+    return fd
+
+
+def _bus_written(buf, names):
+    """True when an event in buf is a write to one of names, or lost events may hide one."""
+    off = 0
+    while off < len(buf):
+        _, mask, _, n = _EVENT.unpack_from(buf, off)
+        off += _EVENT.size
+        if mask & IN_IGNORED:
+            raise OSError("the bus directory was removed")
+        if mask & IN_Q_OVERFLOW or buf[off:off + n].rstrip(b"\0") in names:
+            return True
+        off += n
+    return False
+
+
+def wait(timeout_s=None, db=None, name=None, env=None):
+    """Block until wake() has rows for NAME, then return the block.
+
+    timeout_s None waits with no deadline; otherwise None comes back at the deadline.
+
+    The wait sleeps on an inotify write event of the database or its WAL, never on a
+    timer. Only the main file, -wal and -journal count: a reader writes the -shm file,
+    so a -shm event would wake the waiter on its own read.
+    """
+    env = os.environ if env is None else env
+    db = os.path.realpath(db or resolve_db(env))
+    ensure_db_dir(db)
+    base = os.fsencode(os.path.basename(db))
+    names = {base, base + b"-wal", base + b"-journal"}
+    fd = _inotify(os.path.dirname(db))
+    try:
+        deadline = None if timeout_s is None else time.monotonic() + timeout_s
+        while True:
+            # the watch exists before this read, so a row sent after the read wakes select
+            block = wake(db=db, name=name, env=env, strict=True)
+            if block:
+                return block
+            while True:
+                left = None if deadline is None else deadline - time.monotonic()
+                if left is not None and left <= 0:
+                    return None
+                if select.select([fd], [], [], left)[0] and _bus_written(os.read(fd, 65536), names):
+                    break
+    finally:
+        os.close(fd)
