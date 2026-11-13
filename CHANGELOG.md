@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 - 2026-11-13
+
+- `agentbus-mcp-launch` resolves its own symlink. Started through `~/.local/bin`, it looked for `agentbus.py` there and the MCP server did not start.
+
 ## 0.3.0 - 2026-11-12
 
 - `agentbus-cli wait [SECONDS]`: an idle agent sleeps on an inotify event of the bus database until a row for its name or `*` arrives. No deadline by default. Replaces the 15 s re-poll and the 120 s cap.

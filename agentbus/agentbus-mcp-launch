@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Resolves the newest Hermes venv python that can import mcp and execs it on the agentbus MCP server.
-HERE="$(CDPATH= cd "$(dirname "$0")" && pwd)"
+HERE="$(dirname "$(readlink -f "$0")")"  # resolve a ~/.local/bin symlink to the real dir
 for p in $(ls -td "$HOME"/.hermes/installs/*/environments/*/venv/bin/python3 2>/dev/null); do
   if "$p" -c 'import mcp' 2>/dev/null; then
     exec "$p" "$HERE/agentbus.py" "$@"

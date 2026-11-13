@@ -1,5 +1,5 @@
 {
   "name": "agent-comms",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Send, read and addressing rules for subagents that talk to each other over the agentbus message bus."
 }

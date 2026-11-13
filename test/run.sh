@@ -13,4 +13,14 @@ for f in $(sed -n 's/.*"files": *\[\(.*\)\].*/\1/p' "$root/skills/index.json" | 
   [ -e "$root/skills/$name/$f" ] || { echo "FAIL: skills/index.json lists missing file skills/$name/$f" >&2; exit 1; }
 done
 nice -n 19 ionice -c 3 env -u AGENTBUS_WAKE_MODULE python3 "$root/agentbus/test/test_wake.py" >/dev/null || { echo "FAIL: agentbus wake tests" >&2; exit 1; }
-echo "OK: version $versions consistent in manifests, SKILL.md and skills/index.json; wake tests pass"
+# The harness configs start the MCP launcher through a ~/.local/bin symlink.
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+ln -s "$root/agentbus/agentbus-mcp-launch" "$tmp/launch"
+init='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}'
+out=$(echo "$init" | timeout 30 "$tmp/launch" 2>&1) || true
+case $out in
+  *serverInfo*) mcp="MCP launcher answers initialize through a symlink" ;;
+  *"no Hermes venv python can import mcp"*) mcp="MCP launcher check skipped: no Hermes venv with mcp" ;;
+  *) echo "FAIL: MCP launcher through a symlink: $out" >&2; exit 1 ;;
+esac
+echo "OK: version $versions consistent in manifests, SKILL.md and skills/index.json; wake tests pass; $mcp"
